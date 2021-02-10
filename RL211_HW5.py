@@ -1,7 +1,6 @@
 from collections import deque
 
 import gym
-import keras
 import matplotlib.pyplot as plt
 import numpy as np
 import tensorflow as tf
@@ -137,7 +136,7 @@ def evaluate_Q_Network(q_learn, num_episodes=100):
 #     return model
 
 class Q_Learn:
-    def __init__(self, env, network, max_time_steps, batch_size=64, gamma=0.95, epsilon=0.5):
+    def __init__(self, env, network, max_time_steps, batch_size=64, gamma=0.95, epsilon=0.5, eval_X=200):
         self.buffer = deque(maxlen=2000)
         self.env = env
         self.max_time_steps = max_time_steps
@@ -148,6 +147,9 @@ class Q_Learn:
         self.loss_function = tf.keras.losses.mean_squared_error
         self.optimizer = tf.keras.optimizers.Adam(lr=1e-3)
         self.S = None
+        self.eval_X = eval_X
+        self.X = []
+        self.Y = []
         if network == "DQN":
             self.model = tf.keras.models.Sequential([
                 layers.Conv2D(filters=32, kernel_size=(8, 8), strides=4, activation="relu", input_shape=(84, 84, 1)),
@@ -168,10 +170,28 @@ class Q_Learn:
         else:
             raise ValueError
 
-    def run(self, epsilon=0.5):
+    def evaluate(self, num_episodes=100):
+        values = []
+        for iter in range(num_episodes):
+            self.env.reset()
+            value = 0
+            while True:
+                A = self.get_action(epsilon=0)
+                S, R, done, info = self.env.step(A)
+                value += R
+                if done:
+                    break
+            values.append(value)
+        return np.mean(values)
+
+    def run(self, epsilon=0.5, eval=False):
         self.S = self.env.reset()
         for t in range(self.max_time_steps):
+            if eval and t != 0 and t % self.eval_X == 0:
+                self.X.append(t)
+                self.Y.append(self.evaluate())
             self.env.render()
+
             epsilon = 0.99 * epsilon
             action = self.get_action(epsilon)
             print("Step: {}, Action: {}, bufflen: {}".format(t, action, len(self.buffer)))
@@ -180,7 +200,6 @@ class Q_Learn:
                 self.S = self.env.reset()
             if t > len(self.buffer):
                 self.training_step()
-
         return model
 
     def play_step(self, action):
@@ -226,10 +245,8 @@ if __name__ == '__main__':
     for network in ["DQN", "DRQN"]:
         env = modify_env(gym.make('Frostbite-v0'), p=1)
         q_learn = Q_Learn(env, network, num_time_steps)
-        model = q_learn.run()
-        X = range(num_time_steps)
-        Y = evaluate_Q_Network(q_learn)
-        plt.plot(X, Y, label=network)
+        model = q_learn.run(eval=True)
+        plt.plot(q_learn.X, q_learn.Y, label=network)
         env.close()
 
     plt.show()
@@ -242,7 +259,7 @@ if __name__ == '__main__':
             env = modify_env(gym.make('Frostbite-v0'), p=p)
             q_learn = Q_Learn(env, network, num_time_steps)
             model = q_learn.run()
-            scores[p] = evaluate_Q_Network(q_learn)
+            scores[p] = q_learn.evaluate()
             env.close()
         Y = {k: v / scores[0] for k, v in scores}
         plt.plot(X, Y, label=network)
