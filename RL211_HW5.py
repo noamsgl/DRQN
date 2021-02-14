@@ -79,7 +79,6 @@ class Q_Learn:
                 layers.Conv2D(filters=32, kernel_size=(8, 8), strides=4, activation="relu", input_shape=(84, 84, 1)),
                 layers.Conv2D(filters=64, kernel_size=(4, 4), strides=2, activation="relu"),
                 layers.Conv2D(filters=64, kernel_size=(3, 3), strides=1, activation="relu"),
-                layers.Flatten(),
                 layers.Dense(units=512, activation="relu"),
                 layers.Dense(units=18)
             ])
