@@ -2,6 +2,7 @@ import argparse
 import logging
 import os
 import sys
+import time
 from collections import deque
 
 import gym
@@ -28,7 +29,7 @@ def get_logger(logger_name):
     return logger
 
 
-def modify_env(env, p=1):
+def modify_env(env, p=1, k=4):
     def preprocess(S):
         im = Image.fromarray(np.uint8(S))
         im = im.convert('YCbCr')
@@ -43,13 +44,14 @@ def modify_env(env, p=1):
         return preprocess(S)
 
     def new_step(A):
-        if np.random.rand() <= p:
+        for i in range(k):
             S, R, done, info = env.orig_step(A)
+        if np.random.rand() <= p:
             return preprocess(S), R, done, info
         else:
-            S, R, done, info = env.orig_step(A)
             return np.zeros(shape=(84, 84, 1)), R, done, info
 
+    env.p = p
     env.orig_reset = env.reset
     env.reset = new_reset
     env.orig_step = env.step
@@ -58,11 +60,13 @@ def modify_env(env, p=1):
 
 
 class Q_Learn:
-    def __init__(self, env, network, max_time_steps, batch_size=64, gamma=0.95, epsilon=0.5, eval_X=250, buff_len=1000,
-                 render=True):
+    def __init__(self, env, network, max_time_steps, clone_steps=10000, batch_size=32, gamma=0.95, epsilon=1.0,
+                 eval_X=250, buff_len=1000, render=True):
         self.buffer = deque(maxlen=buff_len)
         self.env = env
+        self.network = network
         self.max_time_steps = max_time_steps
+        self.clone_steps = clone_steps
         self.batch_size = batch_size
         self.nA = env.action_space.n
         self.gamma = gamma
@@ -95,19 +99,27 @@ class Q_Learn:
             ])
         else:
             raise ValueError
+        self.target_model = tf.keras.models.clone_model(self.model)
+        self.target_model.set_weights(self.model.get_weights())
 
-    def run(self, epsilon=0.5, eval=False):
+    def run(self, eval=False):
         self.S = self.env.reset()
         for t in range(self.max_time_steps):
-            if eval and t != 0 and t % self.eval_X == 0:
+            if eval and t != 0 and t % self.eval_X == 0 and t > len(self.buffer):
                 self.X.append(t)
-                self.Y.append(self.evaluate())
+                self.Y.append(self.evaluate(t=t))
+
             if self.render:
                 self.env.render()
 
-            epsilon = 0.999 * epsilon
-            action = self.get_action(epsilon)
-            logger.info("Step: {}, Action: {}, bufflen: {}, epsilon: {}".format(t, action, len(self.buffer), epsilon))
+            if t != 0 and t % self.clone_steps == 0:
+                self.target_model.set_weights(self.model.get_weights())
+
+            self.epsilon = max(0.1, self.epsilon - 18e-7)
+
+            action = self.get_action(self.epsilon)
+            logger.info(
+                "Step: {}, Action: {}, bufflen: {}, epsilon: {}".format(t, action, len(self.buffer), self.epsilon))
             S, R, done, info = self.play_step(action)
             if done:
                 self.S = self.env.reset()
@@ -117,10 +129,19 @@ class Q_Learn:
 
     def play_step(self, action):
         S_tag, R, done, info = self.env.step(action)
+        R = self.clip_reward(R)
         self.buffer.append([self.S, action, R, S_tag, done])
         return S_tag, R, done, info
 
-    def get_action(self, epsilon=0):
+    def clip_reward(self, R):
+        if R > 1:
+            return 1
+        elif R < -1:
+            return -1
+        else:
+            return R
+
+    def get_action(self, epsilon):
         if np.random.rand() < epsilon:
             return np.random.randint(self.nA)
         else:
@@ -131,7 +152,7 @@ class Q_Learn:
         experiences = self.get_experiences()
         states, actions, rewards, next_states, dones = experiences
         states = states.astype(np.float32)
-        next_Q_values = self.model.predict(next_states)
+        next_Q_values = self.target_model.predict(next_states)
         max_next_Q_values = np.max(next_Q_values, axis=1)
         target_Q_values = (rewards + (1 - dones) * self.gamma * max_next_Q_values)
         mask = tf.one_hot(actions, self.nA)
@@ -150,19 +171,22 @@ class Q_Learn:
             for field_index in range(5)]
         return states, actions, rewards, next_states, dones
 
-    def evaluate(self, num_episodes=10, max_episode_len=2000):
+    def evaluate(self, num_episodes=10, max_episode_time=5, t=None):
         values = []
+        if t is not None:
+            self.model.save_weights(os.path.join(results_dir_path, f"weights_{self.network}_{self.env.p}_{t}.h5"))
         for iter in range(num_episodes):
             self.env.reset()
             value = 0
-            for i in range(max_episode_len):
+            start_time = time.time()
+            done = False
+            while (time.time() - start_time) < max_episode_time * 60 and not done:
                 if self.render:
                     self.env.render()
-                A = self.get_action(epsilon=0)
+                A = self.get_action(epsilon=0.0)
                 S, R, done, info = self.env.step(A)
                 value += R
-                if done:
-                    break
+
             logger.info("Evaluating: iter {} of {}, Value: {}".format(iter, num_episodes, value))
             values.append(value)
         return np.mean(values)
@@ -178,21 +202,22 @@ if __name__ == '__main__':
     logger = get_logger(__name__)
     render = False
     np.random.seed(0)
-    max_time_steps = 20000
-    buff_len = 1000
-
-    path = f"results/{args.jid}"
+    max_time_steps = 10000000
+    buff_len = 40000
+    eval_X = 2500
+    results_dir_path = f"results/{args.jid}"
     try:
-        os.mkdir(path)
+        os.mkdir(results_dir_path)
     except OSError:
-        logger.info("Creation of the directory %s failed" % path)
+        logger.info("Creation of the directory %s failed" % results_dir_path)
     else:
-        logger.info("Successfully created the directory %s" % path)
+        logger.info("Successfully created the directory %s" % results_dir_path)
 
-    for network in ["DRQN", "DQN"]:
-        logger.info(f"Begin training jid={args.jid} with network={network}, p={args.p}")
+    for network in ["DQN", "DRQN"]:
+        logger.info(
+            f"Begin training jid={args.jid} with network={network}, p={args.p}, env={args.env}, max_time_steps={max_time_steps}, buff_len={buff_len}, eval_x={eval_X}")
         env = modify_env(gym.make(args.env), p=args.p)
-        q_learn = Q_Learn(env, network, max_time_steps, eval_X=500, buff_len=buff_len, render=render)
+        q_learn = Q_Learn(env, network, max_time_steps, eval_X=eval_X, buff_len=buff_len, render=render)
         model = q_learn.run(eval=True)
         env.close()
 
