@@ -86,7 +86,7 @@ class Q_Learn:
                 layers.Conv2D(filters=64, kernel_size=(3, 3), strides=1, activation="relu"),
                 layers.Flatten(),
                 layers.Dense(units=512, activation="relu"),
-                layers.Dense(units=18)
+                layers.Dense(units=self.nA)
             ])
         elif network == "DRQN":
             self.model = tf.keras.models.Sequential([
@@ -95,7 +95,7 @@ class Q_Learn:
                 layers.Conv2D(filters=64, kernel_size=(3, 3), strides=1, activation="relu"),
                 layers.Reshape((1, 3136)),
                 layers.LSTM(units=512),
-                layers.Dense(units=18)
+                layers.Dense(units=self.nA)
             ])
         else:
             raise ValueError
