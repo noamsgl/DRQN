@@ -1,4 +1,7 @@
 import argparse
+import logging
+import os
+import sys
 from collections import deque
 
 import gym
@@ -6,6 +9,23 @@ import numpy as np
 import tensorflow as tf
 from PIL import Image
 from tensorflow.keras import layers
+
+FORMATTER = logging.Formatter("%(asctime)s — %(name)s — %(funcName)s:%(lineno)d — %(message)s")
+
+
+def get_console_handler():
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setFormatter(FORMATTER)
+    return console_handler
+
+
+def get_logger(logger_name):
+    logger = logging.getLogger(logger_name)
+    logger.setLevel(logging.DEBUG)  # better to have too much log than not enough
+    logger.addHandler(get_console_handler())
+    # with this pattern, it's rarely necessary to propagate the error up to parent
+    logger.propagate = False
+    return logger
 
 
 def modify_env(env, p=1):
@@ -48,7 +68,8 @@ class Q_Learn:
         self.gamma = gamma
         self.epsilon = epsilon
         self.loss_function = tf.keras.losses.mean_squared_error
-        self.optimizer = tf.keras.optimizers.Adam(lr=1e-3)
+        # self.optimizer = tf.keras.optimizers.Adam(lr=1e-3)
+        self.optimizer = tf.keras.optimizers.RMSprop(clipvalue=10.0)
         self.S = None
         self.eval_X = eval_X
         self.X = []
@@ -86,7 +107,7 @@ class Q_Learn:
 
             epsilon = 0.999 * epsilon
             action = self.get_action(epsilon)
-            print("Step: {}, Action: {}, bufflen: {}, epsilon: {}".format(t, action, len(self.buffer), epsilon))
+            logger.info("Step: {}, Action: {}, bufflen: {}, epsilon: {}".format(t, action, len(self.buffer), epsilon))
             S, R, done, info = self.play_step(action)
             if done:
                 self.S = self.env.reset()
@@ -142,29 +163,40 @@ class Q_Learn:
                 value += R
                 if done:
                     break
-            print("Evaluating: iter {} of {}, Value: {}".format(iter, num_episodes, value))
+            logger.info("Evaluating: iter {} of {}, Value: {}".format(iter, num_episodes, value))
             values.append(value)
         return np.mean(values)
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument("-p", help="the probability for the env to flicker", type=float, default=1)
+    parser.add_argument("-p", help="the 1-probability for the env to flicker", type=float, default=1)
     parser.add_argument("-env", help="the name of the env to run", type=str, default='Frostbite-v0')
+    parser.add_argument("-jid", help="the slurm job id", type=int)
     args = parser.parse_args()
+    args.p = 1.0 - args.p
+    logger = get_logger(__name__)
     render = False
     np.random.seed(0)
     max_time_steps = 20000
     buff_len = 1000
 
+    path = f"results/{args.jid}"
+    try:
+        os.mkdir(path)
+    except OSError:
+        logger.info("Creation of the directory %s failed" % path)
+    else:
+        logger.info("Successfully created the directory %s" % path)
+
     for network in ["DRQN", "DQN"]:
-        print("Begin training with network {}, p={}".format(network, args.p))
+        logger.info(f"Begin training jid={args.jid} with network={network}, p={args.p}")
         env = modify_env(gym.make(args.env), p=args.p)
         q_learn = Q_Learn(env, network, max_time_steps, eval_X=500, buff_len=buff_len, render=render)
         model = q_learn.run(eval=True)
         env.close()
 
-        # save results (model and scores)
-        model.save('results/model_{}_{}.h5'.format(network, args.p))
-        np.savetxt("results/GraphA_{}_{}_X.csv".format(network, args.p), q_learn.X)
-        np.savetxt("results/GraphA_{}_{}_Y.csv".format(network, args.p), q_learn.Y)
+        logger.info("save results (model and scores)")
+        model.save(f'results/{args.jid}/model_{network}_{args.p}.h5')
+        np.savetxt(f"results/{args.jid}/GraphA_{network}_{args.p}_X.csv", q_learn.X)
+        np.savetxt(f"results/{args.jid}/GraphA_{network}_{args.p}_Y.csv", q_learn.Y)
