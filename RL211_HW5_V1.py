@@ -60,8 +60,9 @@ def modify_env(env, p=1, k=4):
 
 
 class Q_Learn:
-    def __init__(self, env, network, max_time_steps, clone_steps=10000, batch_size=32, gamma=0.95, epsilon=1.0,
-                 eval_X=250, buff_len=1000, render=True):
+    def __init__(self, env, network, max_time_steps, weights=None, clone_steps=10000, batch_size=32, gamma=0.95,
+                 epsilon=1.0,
+                 eval_X=250, buff_len=1000, initT=0, render=True):
         self.buffer = deque(maxlen=buff_len)
         self.env = env
         self.network = network
@@ -78,6 +79,7 @@ class Q_Learn:
         self.eval_X = eval_X
         self.X = []
         self.Y = []
+        self.t = initT
         self.render = render
         if network == "DQN":
             self.model = tf.keras.models.Sequential([
@@ -99,31 +101,36 @@ class Q_Learn:
             ])
         else:
             raise ValueError
+        if weights is not None:
+            logger.info(f"Attempting to load weights from {weights}")
+            self.model.load_weights(weights)
+            logger.info(f"Successfully loaded weights from {weights}")
         self.target_model = tf.keras.models.clone_model(self.model)
         self.target_model.set_weights(self.model.get_weights())
 
     def run(self, eval=False):
         self.S = self.env.reset()
-        for t in range(self.max_time_steps):
-            if eval and t != 0 and t % self.eval_X == 0 and t > len(self.buffer):
-                self.X.append(t)
-                self.Y.append(self.evaluate(t=t))
+        for _ in range(self.max_time_steps):
+            self.t += 1
+            if eval and self.t != 0 and self.t % self.eval_X == 0 and self.t > len(self.buffer):
+                self.X.append(self.t)
+                self.Y.append(self.evaluate(t=self.t))
 
             if self.render:
                 self.env.render()
 
-            if t != 0 and t % self.clone_steps == 0:
+            if self.t != 0 and self.t % self.clone_steps == 0:
                 self.target_model.set_weights(self.model.get_weights())
 
             self.epsilon = max(0.1, self.epsilon - 18e-7)
 
             action = self.get_action(self.epsilon)
             logger.info(
-                "Step: {}, Action: {}, bufflen: {}, epsilon: {}".format(t, action, len(self.buffer), self.epsilon))
+                "Step: {}, Action: {}, bufflen: {}, epsilon: {}".format(self.t, action, len(self.buffer), self.epsilon))
             S, R, done, info = self.play_step(action)
             if done:
                 self.S = self.env.reset()
-            if t > len(self.buffer):
+            if self.t > len(self.buffer):
                 self.training_step()
         return self.model
 
@@ -196,6 +203,10 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("-p", help="the 1-probability for the env to flicker", type=float, default=1)
     parser.add_argument("-env", help="the name of the env to run", type=str, default='Frostbite-v0')
+    parser.add_argument("-network", help="the type of network to load: DQN or DRQN", type=str, default='DQN')
+    parser.add_argument("-weights", help="the path to weights to load initially", type=str, default=None)
+    parser.add_argument("-initEpsilon", help="the initial epsilon to use", type=float, default=1.0)
+    parser.add_argument("-initT", help="the initial timestep to use", type=int, default=0)
     parser.add_argument("-jid", help="the slurm job id", type=int)
     args = parser.parse_args()
     args.p = 1.0 - args.p
@@ -213,15 +224,15 @@ if __name__ == '__main__':
     else:
         logger.info("Successfully created the directory %s" % results_dir_path)
 
-    for network in ["DQN", "DRQN"]:
-        logger.info(
-            f"Begin training jid={args.jid} with network={network}, p={args.p}, env={args.env}, max_time_steps={max_time_steps}, buff_len={buff_len}, eval_x={eval_X}")
-        env = modify_env(gym.make(args.env), p=args.p)
-        q_learn = Q_Learn(env, network, max_time_steps, eval_X=eval_X, buff_len=buff_len, render=render)
-        model = q_learn.run(eval=True)
-        env.close()
+    logger.info(
+        f"Begin training jid={args.jid} with network={args.network}, p={args.p}, env={args.env}, weights={args.weights}, initialEpsilon={args.initEpsilon}, initT={args.initT}, max_time_steps={max_time_steps}, buff_len={buff_len}, eval_x={eval_X}")
+    env = modify_env(gym.make(args.env), p=args.p)
+    q_learn = Q_Learn(env, args.network, max_time_steps, weights=args.weights, epsilon=args.initEpsilon,
+                      initT=args.initT, eval_X=eval_X, buff_len=buff_len, render=render)
+    model = q_learn.run(eval=True)
+    env.close()
 
-        logger.info("save results (model and scores)")
-        model.save(f'results/{args.jid}/model_{network}_{args.p}.h5')
-        np.savetxt(f"results/{args.jid}/GraphA_{network}_{args.p}_X.csv", q_learn.X)
-        np.savetxt(f"results/{args.jid}/GraphA_{network}_{args.p}_Y.csv", q_learn.Y)
+    logger.info("save results (model and scores)")
+    model.save(f'results/{args.jid}/model_{args.network}_{args.p}.h5')
+    np.savetxt(f"results/{args.jid}/GraphA_{args.network}_{args.p}_X.csv", q_learn.X)
+    np.savetxt(f"results/{args.jid}/GraphA_{args.network}_{args.p}_Y.csv", q_learn.Y)
