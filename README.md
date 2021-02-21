@@ -1,6 +1,7 @@
-# DRQN
+# Deep Recurrent Q-Learning Network for Partially Observable POMDPs
 
-### Authors: Dolev Orgad and Noam Siegel
+### Authors: Noam Siegel and Dolev Orgad
+### Link to Youtube Explanation: [Link](https://youtu.be/FYhD57Dc8K0)
 
 ## The paper and our main work
 We implemented the paper named above in ~400 lines of python code.
