@@ -5,7 +5,7 @@
 
 ## The paper and our main work
 We implemented the paper named above in ~400 lines of python code.
-We used the TensorFlow.Keras module to build 2 different Neural Networks:
+We used the `TensorFlow.Keras` module to build 2 different Neural Networks:
 DQN - The standard network suggested in the original DQN paper. It’ll be used as our baseline for comparing performance results.
 DRQN - A variation of the DQN network in which the first fully connected layer is replaced with a recurrent LSTM layer of the same size.​
 
