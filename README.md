@@ -38,4 +38,4 @@ Our code in GitHub.
 
 Our performance graphs
 
-![graph](images/plots.png)
+![graph](images/master_plot.png)
