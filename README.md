@@ -2,6 +2,7 @@
 
 ### Authors: Noam Siegel and Dolev Orgad
 ### Link to Youtube Explanation: [Link](https://youtu.be/FYhD57Dc8K0)
+### Link to original paper: [Link](https://arxiv.org/abs/1507.06527)
 
 ## The paper and our main work
 We implemented the paper named above in ~400 lines of python code.
@@ -35,7 +36,7 @@ The value of job id can be arbitrary if there is no need to keep track of multip
 
 ## References
 [Deep Recurrent Q-Learning for Partially Observable MDPs, Matthew Hausknecht and Peter Stone](https://arxiv.org/abs/1507.06527)
-
+[Human-level control through deep reinforcement learning](https://www.nature.com/articles/nature14236)
 [Open AI Gym](https://gym.openai.com/)
 
 
