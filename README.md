@@ -19,8 +19,10 @@ We ran the models in the university GPU environment. It is a linux machine with 
 We used RMSProp algorithm with minibatches of size 32.
 The behaviour policy during training was epsilon-greedy with epsilon annealed linearly from 1.0 to 0.1 over some parameter number of steps, and fixed at 0.1 thereafter.
 We checked two hyper-parameters:
-Epsilon step - controls the length of the exploration period of the agent. The values we checked are 9e-7, 1.2e-6, 18e-6,3.6e-6 which account to 1m, 750k, 500k, 250k steps until epsilon reaches 0.1.
-Buffer length - controls the amount of previously encountered experiences available to the agent.
+
+1) Epsilon step - controls the length of the exploration period of the agent. The values we checked are 9e-7, 1.2e-6, 18e-6,3.6e-6 which correspond to 1m, 750k, 500k, 250k steps until epsilon reaches 0.1.
+
+2) Buffer length - controls the amount of previously encountered experiences available to the agent. We checked the values 10k, 100k.
 
 ## How to run the code
 
