@@ -1,5 +1,6 @@
 # DRQN
 
+### Authors: Dolev Orgad and Noam Siegel
 
 ## The paper and our main work
 We implemented the paper named above in ~400 lines of python code.
@@ -31,11 +32,12 @@ The value of job id can be arbitrary if there is no need to keep track of multip
 
 
 
-##References
-Deep Recurrent Q-Learning for Partially Observable MDPs, Matthew Hausknecht and Peter Stone.
-Open AI Gym.
-Our code in GitHub.
+## References
+[Deep Recurrent Q-Learning for Partially Observable MDPs, Matthew Hausknecht and Peter Stone](https://arxiv.org/abs/1507.06527)
 
-Our performance graphs
+[Open AI Gym](https://gym.openai.com/)
+
+
+### Our performance graphs:
 
 ![graph](images/master_plot.png)
