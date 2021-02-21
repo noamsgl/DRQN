@@ -38,7 +38,7 @@ The value of job id can be arbitrary if there is no need to keep track of multip
 [Deep Recurrent Q-Learning for Partially Observable MDPs, Matthew Hausknecht and Peter Stone](https://arxiv.org/abs/1507.06527)
 [Human-level control through deep reinforcement learning](https://www.nature.com/articles/nature14236)
 [Open AI Gym](https://gym.openai.com/)
-
+[SlimeVolleyGym](https://github.com/hardmaru/slimevolleygym)
 
 ### Our performance graphs:
 
