@@ -25,8 +25,7 @@ from tensorflow.keras import layers
 FORMATTER = logging.Formatter("%(asctime)s — %(name)s — %(funcName)s:%(lineno)d — %(message)s")
 
 """SLIME ATARI IMPORTS"""
-
-
+# https://github.com/hardmaru/slimevolleygym/blob/e840033232ddd03c455ffa6d656abaac5212d1af/test_atari.py
 class MaxAndSkipEnv(gym.Wrapper):
     def __init__(self, env, skip=4):
         """
@@ -147,10 +146,16 @@ def modify_env_slime(env, stack=4):
 #     return env
 
 
+"""
+The main class which runs the Q-learning
+"""
 class Q_Learn:
     def __init__(self, env, network, max_time_steps, jid, weights=None, clone_steps=10000, batch_size=32, gamma=0.95,
                  epsilon=1.0, epsilonStep=18e-5, eval_X=250, buff_len=1000, initT=0, model=None, buffer=None,
                  render=True):
+        """
+        Initialize the model
+        """
         self.jid = jid
         if buffer is None:
             self.buffer = deque(maxlen=buff_len)
@@ -186,6 +191,9 @@ class Q_Learn:
         self.target_model.set_weights(self.model.get_weights())
 
     def run(self, eval=True):
+        """
+        Run the algorithm
+        """
         self.S = self.env.reset()
         for _ in range(self.max_time_steps):
             self.t += 1
@@ -212,12 +220,18 @@ class Q_Learn:
         return self.model
 
     def play_step(self, action):
+        """
+        env.step(action) and append result to experience replay buffer
+        """
         S_tag, R, done, info = self.env.step(action)
         R = self.clip_reward(R)
         self.buffer.append([self.S, action, R, S_tag, done])
         return S_tag, R, done, info
 
     def clip_reward(self, R):
+        """
+        Clip the reward to abs(R)<=1
+        """
         if R > 1:
             return 1
         elif R < -1:
@@ -226,6 +240,9 @@ class Q_Learn:
             return R
 
     def get_action(self, epsilon):
+        """
+        Return an action predicted by the model using an epsilon-greedy policy
+        """
         if np.random.rand() < epsilon:
             return np.random.randint(self.nA)
         else:
@@ -233,6 +250,9 @@ class Q_Learn:
             return np.argmax(Q_values[0])
 
     def training_step(self):
+        """
+        Take a training step
+        """
         experiences = self.get_experiences()
         states, actions, rewards, next_states, dones = experiences
         states = states.astype(np.float32)
@@ -248,6 +268,9 @@ class Q_Learn:
             self.optimizer.apply_gradients(zip(grads, self.model.trainable_variables))
 
     def get_experiences(self):
+        """
+        Sample self.batch_size experiences from the experience replay buffer 
+        """
         idxs = np.random.randint(len(self.buffer), size=self.batch_size)
         batch = [self.buffer[i] for i in idxs]
         states, actions, rewards, next_states, dones = [
@@ -256,6 +279,9 @@ class Q_Learn:
         return states, actions, rewards, next_states, dones
 
     def evaluate(self, num_episodes=10, max_episode_time=5):
+        """
+        Evaluate the learned policy for num_episodes, where each episode is terminated after max_episode_time minutes.
+        """
         values = []
         self.save_run()
         for iter in range(num_episodes):
@@ -275,6 +301,9 @@ class Q_Learn:
         return np.mean(values)
 
     def save_run(self):
+        """
+        persist the algorithm's parameters to allow continued run from current state 
+        """
         model_fpath = os.path.join("results", str(self.jid), f"model_{self.network}_{self.t}.h5")
         fname = os.path.join("results", str(self.jid), f"data_{self.network}_{self.t}.pickle")
         self.model.save(model_fpath)
@@ -291,6 +320,9 @@ class Q_Learn:
         pickle.dump(data, open(fname, "wb"))
 
     def init_model(self):
+        """
+        Initiate the Keras model
+        """
         if self.network == "DQN":
             self.model = tf.keras.models.Sequential([
                 layers.Conv2D(filters=32, kernel_size=(8, 8), strides=4, activation="relu", input_shape=(84, 84, 1)),
@@ -312,10 +344,12 @@ class Q_Learn:
         else:
             raise ValueError
 
-
+"""
+Main
+"""
 if __name__ == '__main__':
     np.random.seed(0)
-
+#     get arguments from command line
     parser = argparse.ArgumentParser()
     parser.add_argument("-pickle", help="the path to the pickle file ", type=str, default=None)
     parser.add_argument("-render", help="render display", type=bool, default=False)
@@ -332,6 +366,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     logger = get_logger(__name__)
 
+#     if args.pickle is not None, continue running from previously saved state
     if args.pickle is not None:
         data = pickle.load(open(args.pickle, "rb"))
         model_fpath = data["model_fpath"]
@@ -357,6 +392,8 @@ if __name__ == '__main__':
         q_learn = Q_Learn(network=network, env=env, model=model, max_time_steps=maxsteps, epsilon=epsilon,
                           epsilonStep=epsilonStep, eval_X=evalx, initT=t, buffer=buffer, render=args.render, jid=jid)
         q_learn.run(eval=True)
+        
+#         else, begin fresh run
     else:
         results_dir_path = f"results/{args.jid}"
         try:
@@ -369,6 +406,7 @@ if __name__ == '__main__':
         logger.info(
             f"Begin training jid={args.jid} with network={args.network}, env={args.env}, initialEpsilon={args.initEpsilon}, epsilonStep={args.epsilonStep}, initT={args.initT}, max_time_steps={args.maxsteps}, buff_len={args.bufflen}, eval_x={args.evalx}")
 
+        # stack: how many frames to load per data point
         if args.network == "DQN":
             stack = 4
         elif args.network == "DRQN":
